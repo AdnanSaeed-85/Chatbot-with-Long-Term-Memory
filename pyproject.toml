@@ -13,5 +13,6 @@ dependencies = [
     "langchain-openai>=1.1.10",
     "langgraph>=1.0.9",
     "langgraph-checkpoint-postgres>=3.0.4",
+    "psycopg-binary>=3.3.3",
     "pydantic>=2.12.5",
 ]
