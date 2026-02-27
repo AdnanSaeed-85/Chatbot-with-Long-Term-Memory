@@ -9,7 +9,7 @@ def addition(x, y):
 
 @mcp.tool
 def subtraction(x, y):
-    "you will received 2 numbers, you have to perform subtraction and return a single digit"
+    "you will received 2 numbers, you have to perform subtraction and return a single digit answer"
     return x - y
 
 if __name__ == '__main__':
