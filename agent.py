@@ -3,6 +3,7 @@ import uuid
 import warnings
 from typing import List, TypedDict, Annotated
 
+from langsmith import traceable
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import AnyMessage, HumanMessage, SystemMessage
@@ -52,6 +53,7 @@ class MemoryDecision(BaseModel):
 structured_llm = llm1.with_structured_output(MemoryDecision)
 
 # -------------------- Remember Node ------------------------
+@traceable(name="Remember Agent")
 def RememberNode(state: state_message, config: RunnableConfig, store: BaseStore):
     user_id = config['configurable']['user_id']
     namespace = ('user', user_id, 'details')
@@ -78,6 +80,7 @@ def RememberNode(state: state_message, config: RunnableConfig, store: BaseStore)
     return {}
 
 # ------------------- Graph Construction & Execution -------------------
+@traceable(name="Connected to MCP server")
 async def main():
     print("Connecting to MCP server...")
     # 1. Initialize MCP Client and get tools
@@ -89,6 +92,7 @@ async def main():
     llm_with_tools = llm2.bind_tools(mcp_tools)
 
     # 3. Define chatnode as a closure so it has access to llm_with_tools
+    @traceable(name="Chat Agent")
     def chatnode(state: state_message, config: RunnableConfig, store: BaseStore):
         user_id = config['configurable']['user_id']
         namespace = ('user', user_id, 'details')
@@ -110,49 +114,48 @@ async def main():
     # 4. Setup Database and Graph
     DB_URI = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@localhost:5442/{POSTGRES_DB}?sslmode=disable"
     
-    with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
-        checkpointer.setup()
-        with PostgresStore.from_conn_string(DB_URI) as store:
-            store.setup()
+
+    with PostgresStore.from_conn_string(DB_URI) as store:
+        store.setup()
+        
+        builder = StateGraph(state_message)
+
+        builder.add_node('chatnode', chatnode)
+        builder.add_node('RememberNode', RememberNode)
+        builder.add_node('tools', ToolNode(mcp_tools))
+
+        builder.add_edge(START, 'RememberNode')
+        builder.add_edge('RememberNode', 'chatnode')
+        
+        builder.add_conditional_edges('chatnode', tools_condition)
+        builder.add_edge('tools', 'chatnode')
+
+        chatbot = builder.compile(store=store)
+
+        config = {'configurable': {'user_id': '4'}}
+
+        # 5. User Interaction Loop
+        while True:
+            user_input = input('\nuser: ')
+            if user_input.lower() in ['exit', 'bye', 'quit']:
+                print('Thanks')
+                break
             
-            builder = StateGraph(state_message)
-
-            builder.add_node('chatnode', chatnode)
-            builder.add_node('RememberNode', RememberNode)
-            builder.add_node('tools', ToolNode(mcp_tools))
-
-            builder.add_edge(START, 'RememberNode')
-            builder.add_edge('RememberNode', 'chatnode')
+            # Using .ainvoke() is required because MCP tools must execute asynchronously
+            final_state = await chatbot.ainvoke(
+                {'messages': [HumanMessage(content=user_input)]},
+                config=config
+            )
             
-            builder.add_conditional_edges('chatnode', tools_condition)
-            builder.add_edge('tools', 'chatnode')
-
-            chatbot = builder.compile(store=store, checkpointer=checkpointer)
-
-            config = {'configurable': {'user_id': '4', 'thread_id': '50'}}
-
-            # 5. User Interaction Loop
-            while True:
-                user_input = input('\nuser: ')
-                if user_input.lower() in ['exit', 'bye', 'quit']:
-                    print('Thanks')
-                    break
-                
-                # Using .ainvoke() is required because MCP tools must execute asynchronously
-                final_state = chatbot.invoke(
-                    {'messages': [HumanMessage(content=user_input)]},
-                    config=config
-                )
-                
-                print(f"Bot: {final_state['response']}\n")
-                
-                # Print stored memories for debugging (from your original code)
-                print("--- Current Stored Memories ---")
-                namespace = ('user', config['configurable']['user_id'], 'details')
-                personal_messages = store.search(namespace)
-                for i in personal_messages:
-                    print(i.value['data'])
-                print("-------------------------------")
+            print(f"Bot: {final_state['response']}\n")
+            
+            # Print stored memories for debugging (from your original code)
+            print("--- Current Stored Memories ---")
+            namespace = ('user', config['configurable']['user_id'], 'details')
+            personal_messages = store.search(namespace)
+            for i in personal_messages:
+                print(i.value['data'])
+            print("-------------------------------")
 
 if __name__ == '__main__':
     # Execute the async main function
