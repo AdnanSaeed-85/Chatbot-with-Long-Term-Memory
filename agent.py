@@ -128,7 +128,7 @@ async def main():
                 checkpointer=checkpointer
                 )
 
-            config = {'configurable': {'user_id': '10', 'thread_id': '01'}}
+            config = {'configurable': {'user_id': 'a1', 'thread_id': 'A1'}}
 
             while True:
                 user_input = input('\nuser: ')
@@ -136,14 +136,16 @@ async def main():
                     print('Thanks')
                     break
                 
-                final_state = await chatbot.ainvoke(
+                async for message_chunks, metadata in chatbot.astream(
                     {'messages': [HumanMessage(content=user_input)]},
-                    config=config
-                )
+                    config=config,
+                    stream_mode='messages'
+                ):
+                    if message_chunks.content and metadata.get('langgraph_node') == 'chatnode':
+                        print(message_chunks.content, end='', flush=True)
+                print()
                 
-                print(f"Bot: {final_state['response']}\n")
-                
-                print("--- Current Stored Memories ---")
+                print("\n--- Current Stored Memories ---")
                 namespace = ('user', config['configurable']['user_id'], 'details')
                 personal_messages = store.search(namespace)
                 for i in personal_messages:
