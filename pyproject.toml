@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "dotenv>=0.9.9",
+    "faiss-cpu>=1.13.2",
     "fastmcp>=3.0.2",
     "langchain>=1.2.10",
     "langchain-community>=0.4.1",
@@ -13,10 +14,12 @@ dependencies = [
     "langchain-groq>=1.1.2",
     "langchain-mcp-adapters>=0.2.1",
     "langchain-openai>=1.1.10",
+    "langchain-text-splitters>=1.1.1",
     "langgraph>=1.0.9",
     "langgraph-checkpoint-postgres>=3.0.4",
     "langsmith>=0.7.7",
     "psycopg-binary>=3.3.3",
     "pydantic>=2.12.5",
+    "pypdf>=6.7.4",
     "streamlit>=1.54.0",
 ]

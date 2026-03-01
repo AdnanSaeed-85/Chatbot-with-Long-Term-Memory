@@ -20,16 +20,17 @@ from langgraph.store.base import BaseStore
 from CONFIG import GROQ_MODEL, POSTGRES_USER, POSTGRES_DB, POSTGRES_PASSWORD
 from prompts import SYSTEM_PROMPT_TEMPLATE, MEMORY_PROMPT
 from langchain_mcp_adapters.client import MultiServerMCPClient
+from tools import karavan_rag
 
 load_dotenv()
 warnings.filterwarnings("ignore", category=UserWarning)
 
 # ----------------- Configuration & MCP --------------------
 SERVERS = {
-    'math': {
+    'rag': {
         'transport': 'stdio',
-        'command': 'C:\\Users\\saeed\\AppData\\Local\\Programs\\Python\\Python311\\Scripts\\uv.exe',
-        'args': ['run', 'fastmcp', 'run', 'A:\\PRO\\p1\\main.py']
+        'command': 'uv',
+        'args': ['run', 'fastmcp', 'run', 'A:\\PRO\\p1\\tools.py']
     }
 }
 
@@ -80,20 +81,16 @@ def RememberNode(state: state_message, config: RunnableConfig, store: BaseStore)
     return {}
 
 # ------------------- Graph Construction & Execution -------------------
-@traceable(name="Connected to MCP server")
 async def main():
     print("Connecting to MCP server...")
-    # 1. Initialize MCP Client and get tools
     client = MultiServerMCPClient(SERVERS)
     mcp_tools = await client.get_tools()
     print(f"--- Loaded Tools: {[t.name for t in mcp_tools]} ---")
 
-    # 2. Bind the fetched tools to the LLM
-    llm_with_tools = llm2.bind_tools(mcp_tools)
+    llm_with_tools = llm2.bind_tools(mcp_tools + [karavan_rag])
 
-    # 3. Define chatnode as a closure so it has access to llm_with_tools
     @traceable(name="Chat Agent")
-    def chatnode(state: state_message, config: RunnableConfig, store: BaseStore):
+    async def chatnode(state: state_message, config: RunnableConfig, store: BaseStore):
         user_id = config['configurable']['user_id']
         namespace = ('user', user_id, 'details')
 
@@ -105,15 +102,11 @@ async def main():
         )
 
         messages = state['messages']
-        # We can use standard .invoke() here because LangGraph handles sync nodes 
-        # inside an async graph execution automatically.
-        response = llm_with_tools.invoke([system_message] + messages)
+        response = await llm_with_tools.ainvoke([system_message] + messages)
         
         return {"messages": [response], "response": response.content}
 
-    # 4. Setup Database and Graph
     DB_URI = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@localhost:5442/{POSTGRES_DB}?sslmode=disable"
-    
 
     with PostgresStore.from_conn_string(DB_URI) as store:
         store.setup()
@@ -122,8 +115,7 @@ async def main():
 
         builder.add_node('chatnode', chatnode)
         builder.add_node('RememberNode', RememberNode)
-        builder.add_node('tools', ToolNode(mcp_tools))
-
+        builder.add_node('tools', ToolNode(mcp_tools + [karavan_rag]))
         builder.add_edge(START, 'RememberNode')
         builder.add_edge('RememberNode', 'chatnode')
         
@@ -132,16 +124,14 @@ async def main():
 
         chatbot = builder.compile(store=store)
 
-        config = {'configurable': {'user_id': '4'}}
+        config = {'configurable': {'user_id': '00'}}
 
-        # 5. User Interaction Loop
         while True:
             user_input = input('\nuser: ')
             if user_input.lower() in ['exit', 'bye', 'quit']:
                 print('Thanks')
                 break
             
-            # Using .ainvoke() is required because MCP tools must execute asynchronously
             final_state = await chatbot.ainvoke(
                 {'messages': [HumanMessage(content=user_input)]},
                 config=config
@@ -149,7 +139,6 @@ async def main():
             
             print(f"Bot: {final_state['response']}\n")
             
-            # Print stored memories for debugging (from your original code)
             print("--- Current Stored Memories ---")
             namespace = ('user', config['configurable']['user_id'], 'details')
             personal_messages = store.search(namespace)
@@ -158,5 +147,4 @@ async def main():
             print("-------------------------------")
 
 if __name__ == '__main__':
-    # Execute the async main function
     asyncio.run(main())

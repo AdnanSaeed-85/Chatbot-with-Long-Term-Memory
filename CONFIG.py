@@ -10,4 +10,13 @@ TEMPERATURE=0.7
 
 GEMINI_MODEL='gemini-2.5-flash-lite'
 
-MAX_TOKENS=150
+PDFS = [
+    r"A:\PRO\p1\KaravanTech_Company_Policies.pdf",
+    r"A:\PRO\p1\KaravanTech_Company_Profile.pdf",
+    r"A:\PRO\p1\KaravanTech_Products_and_Pricing.pdf",
+]
+
+INDEX_PATH = "karavantech_faiss"
+
+EMBED_MODEL = "text-embedding-3-small"
+CHAT_MODEL = "gpt-4o-mini"
