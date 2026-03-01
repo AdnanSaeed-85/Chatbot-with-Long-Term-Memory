@@ -13,7 +13,6 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
 from pydantic import BaseModel, Field
 
-# Make sure these are properly defined in your CONFIG.py and prompts.py
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.store.postgres import PostgresStore
 from langgraph.store.base import BaseStore
@@ -90,7 +89,6 @@ async def main():
 
     llm_with_tools = llm2.bind_tools(mcp_tools + [karavan_rag])
 
-    @traceable(name="Chat Agent")
     async def chatnode(state: state_message, config: RunnableConfig, store: BaseStore):
         user_id = config['configurable']['user_id']
         namespace = ('user', user_id, 'details')

@@ -4,7 +4,7 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
 from CONFIG import EMBED_MODEL
 from langchain_core.tools import tool
-
+from langsmith import traceable
 load_dotenv()
 mcp = FastMCP('MCP_Server')
 
@@ -16,6 +16,7 @@ def embedd_loading(embed_model_name: str):
 
 retriever = embedd_loading(EMBED_MODEL)
 
+@traceable(name="RAG calling")
 @tool
 def karavan_rag(query: str) -> str:
     """
@@ -25,6 +26,7 @@ def karavan_rag(query: str) -> str:
     retrieved = retriever.invoke(query)
     return "\n\n".join(ret.page_content for ret in retrieved)
 
+@traceable(name="Addition tool calling")
 @mcp.tool
 def addition(x, y):
     'add x and y'
