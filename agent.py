@@ -14,7 +14,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from pydantic import BaseModel, Field
 
 # Make sure these are properly defined in your CONFIG.py and prompts.py
-from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.store.postgres import PostgresStore
 from langgraph.store.base import BaseStore
 from CONFIG import GROQ_MODEL, POSTGRES_USER, POSTGRES_DB, POSTGRES_PASSWORD
@@ -85,7 +85,8 @@ async def main():
     print("Connecting to MCP server...")
     client = MultiServerMCPClient(SERVERS)
     mcp_tools = await client.get_tools()
-    print(f"--- Loaded Tools: {[t.name for t in mcp_tools]} ---")
+    print(f"--- Loaded MCP: {[t.name for t in mcp_tools]} ---")
+    print(f"--- Loaded Tools: {[karavan_rag.name]} ---")
 
     llm_with_tools = llm2.bind_tools(mcp_tools + [karavan_rag])
 
@@ -108,43 +109,49 @@ async def main():
 
     DB_URI = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@localhost:5442/{POSTGRES_DB}?sslmode=disable"
 
-    with PostgresStore.from_conn_string(DB_URI) as store:
-        store.setup()
-        
-        builder = StateGraph(state_message)
-
-        builder.add_node('chatnode', chatnode)
-        builder.add_node('RememberNode', RememberNode)
-        builder.add_node('tools', ToolNode(mcp_tools + [karavan_rag]))
-        builder.add_edge(START, 'RememberNode')
-        builder.add_edge('RememberNode', 'chatnode')
-        
-        builder.add_conditional_edges('chatnode', tools_condition)
-        builder.add_edge('tools', 'chatnode')
-
-        chatbot = builder.compile(store=store)
-
-        config = {'configurable': {'user_id': '00'}}
-
-        while True:
-            user_input = input('\nuser: ')
-            if user_input.lower() in ['exit', 'bye', 'quit']:
-                print('Thanks')
-                break
+    async with AsyncPostgresSaver.from_conn_string(DB_URI) as checkpointer:
+        await checkpointer.setup()
+        with PostgresStore.from_conn_string(DB_URI) as store:
+            store.setup()
             
-            final_state = await chatbot.ainvoke(
-                {'messages': [HumanMessage(content=user_input)]},
-                config=config
-            )
+            builder = StateGraph(state_message)
+
+            builder.add_node('chatnode', chatnode)
+            builder.add_node('RememberNode', RememberNode)
+            builder.add_node('tools', ToolNode(mcp_tools + [karavan_rag]))
+            builder.add_edge(START, 'RememberNode')
+            builder.add_edge('RememberNode', 'chatnode')
             
-            print(f"Bot: {final_state['response']}\n")
-            
-            print("--- Current Stored Memories ---")
-            namespace = ('user', config['configurable']['user_id'], 'details')
-            personal_messages = store.search(namespace)
-            for i in personal_messages:
-                print(i.value['data'])
-            print("-------------------------------")
+            builder.add_conditional_edges('chatnode', tools_condition)
+            builder.add_edge('tools', 'chatnode')
+
+            chatbot = builder.compile(
+                store=store,
+                checkpointer=checkpointer
+                )
+
+            config = {'configurable': {'user_id': '10', 'thread_id': '01'}}
+
+            while True:
+                user_input = input('\nuser: ')
+                if user_input.lower() in ['exit', 'bye', 'quit']:
+                    print('Thanks')
+                    break
+                
+                final_state = await chatbot.ainvoke(
+                    {'messages': [HumanMessage(content=user_input)]},
+                    config=config
+                )
+                
+                print(f"Bot: {final_state['response']}\n")
+                
+                print("--- Current Stored Memories ---")
+                namespace = ('user', config['configurable']['user_id'], 'details')
+                personal_messages = store.search(namespace)
+                for i in personal_messages:
+                    print(i.value['data'])
+                print("-------------------------------")
 
 if __name__ == '__main__':
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     asyncio.run(main())
