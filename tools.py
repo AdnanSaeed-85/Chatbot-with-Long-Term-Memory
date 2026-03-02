@@ -4,6 +4,8 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
 from CONFIG import EMBED_MODEL
 from langchain_core.tools import tool
+from langgraph.types import interrupt
+
 load_dotenv()
 mcp = FastMCP('MCP_Server')
 
@@ -20,9 +22,19 @@ def karavan_rag(query: str) -> str:
     """
     Answer questions about KaravanTech company documents.
     Uses company policies, profile, and product files.
+        
+                  **HUMAN-IN-THE-LOOP**
+    before give any information about KaravanTech, this tool will interrupt
+    and wait for human decision (yes/ anything else)
     """
     retrieved = retriever.invoke(query)
-    return "\n\n".join(ret.page_content for ret in retrieved)
+    docs = "\n\n".join(ret.page_content for ret in retrieved)
+
+    human_decision = interrupt("Type yes to allow, anything else to deny")
+    if human_decision.strip().lower() != "yes":
+        return "Denied by human."
+
+    return docs
 
 @mcp.tool
 def addition(x, y):

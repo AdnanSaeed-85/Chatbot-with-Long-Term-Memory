@@ -12,6 +12,7 @@ from langgraph.graph import START, END, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
 from pydantic import BaseModel, Field
+from langgraph.types import Command
 
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.store.postgres import PostgresStore
@@ -40,7 +41,6 @@ llm2 = ChatOpenAI(model='gpt-4o-mini')
 # ----------------- Pydantic Schemas --------------------
 class state_message(TypedDict):
     messages: Annotated[List[AnyMessage], add_messages]
-    response: str
 
 class MemoryItems(BaseModel):
     text: str = Field(..., description="Atomic user memory")
@@ -103,7 +103,7 @@ async def main():
         messages = state['messages']
         response = await llm_with_tools.ainvoke([system_message] + messages)
         
-        return {"messages": [response], "response": response.content}
+        return {"messages": [response]}
 
     DB_URI = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@localhost:5442/{POSTGRES_DB}?sslmode=disable"
 
@@ -128,23 +128,52 @@ async def main():
                 checkpointer=checkpointer
                 )
 
-            config = {'configurable': {'user_id': 'a1', 'thread_id': 'A1'}}
+            config = {'configurable': {'user_id': 'a5', 'thread_id': 'A5'}}
 
             while True:
                 user_input = input('\nuser: ')
                 if user_input.lower() in ['exit', 'bye', 'quit']:
                     print('Thanks')
                     break
-                
-                async for message_chunks, metadata in chatbot.astream(
-                    {'messages': [HumanMessage(content=user_input)]},
-                    config=config,
-                    stream_mode='messages'
-                ):
-                    if message_chunks.content and metadata.get('langgraph_node') == 'chatnode':
-                        print(message_chunks.content, end='', flush=True)
+
+                input_data = {"messages": [HumanMessage(content=user_input)]}
+
+                while True:  # inner loop for HITL
+                    interrupted = False
+
+                    # Use "messages" mode for streaming tokens
+                    async for update in chatbot.astream(
+                        input_data,
+                        config=config,
+                        stream_mode=["updates", "messages"]  # both modes simultaneously
+                    ):
+                        # With multiple modes, update is a tuple: (mode, data)
+                        mode, data = update
+
+                        if mode == "updates":
+                            if "__interrupt__" in data:
+                                interrupt_data = data["__interrupt__"][0].value
+                                print(f"\nHITL: {interrupt_data}")
+                                decision = input("your decision: ").strip()
+                                input_data = Command(resume=decision)
+                                interrupted = True
+                                break
+
+                        elif mode == "messages":
+                            # data is a tuple: (message_chunk, metadata)
+                            msg_chunk, metadata = data
+                            # Only print tokens from chatnode, not tool nodes
+                            if (
+                                metadata.get("langgraph_node") == "chatnode"
+                                and hasattr(msg_chunk, "content")
+                                and msg_chunk.content
+                            ):
+                                print(msg_chunk.content, end="", flush=True)
+
+                    if not interrupted:
+                        break
+
                 print()
-                
                 print("\n--- Current Stored Memories ---")
                 namespace = ('user', config['configurable']['user_id'], 'details')
                 personal_messages = store.search(namespace)
