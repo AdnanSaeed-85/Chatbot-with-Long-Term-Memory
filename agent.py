@@ -27,9 +27,15 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 # ----------------- Configuration & MCP --------------------
 SERVERS = {
-    "tools": {
-        "transport": "sse",
-        "url": "https://dynamic-purple-blackbird.fastmcp.app/mcp"
+    'add': {
+        'transport': 'stdio',
+        'command': 'uv',
+        'args': ['run', 'fastmcp', 'run', 'A:\\PRO\\p1\\tools.py']
+    },
+
+    'sub': {
+        'transport': 'streamable_http',
+        'url': 'https://dynamic-purple-blackbird.fastmcp.app/mcp'
     }
 }
 
