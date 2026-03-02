@@ -138,18 +138,15 @@ async def main():
 
                 input_data = {"messages": [HumanMessage(content=user_input)]}
 
-                while True:  # inner loop for HITL
+                while True:
                     interrupted = False
 
-                    # Use "messages" mode for streaming tokens
                     async for update in chatbot.astream(
                         input_data,
                         config=config,
-                        stream_mode=["updates", "messages"]  # both modes simultaneously
+                        stream_mode=["updates", "messages"]
                     ):
-                        # With multiple modes, update is a tuple: (mode, data)
                         mode, data = update
-
                         if mode == "updates":
                             if "__interrupt__" in data:
                                 interrupt_data = data["__interrupt__"][0].value
@@ -160,14 +157,8 @@ async def main():
                                 break
 
                         elif mode == "messages":
-                            # data is a tuple: (message_chunk, metadata)
                             msg_chunk, metadata = data
-                            # Only print tokens from chatnode, not tool nodes
-                            if (
-                                metadata.get("langgraph_node") == "chatnode"
-                                and hasattr(msg_chunk, "content")
-                                and msg_chunk.content
-                            ):
+                            if (metadata.get("langgraph_node") == "chatnode" and hasattr(msg_chunk, "content") and msg_chunk.content):
                                 print(msg_chunk.content, end="", flush=True)
 
                     if not interrupted:
