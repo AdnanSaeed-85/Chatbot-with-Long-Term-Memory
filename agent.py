@@ -21,6 +21,7 @@ from CONFIG import GROQ_MODEL, POSTGRES_USER, POSTGRES_DB, POSTGRES_PASSWORD
 from prompts import SYSTEM_PROMPT_TEMPLATE, MEMORY_PROMPT
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from tools import karavan_rag
+import os
 
 load_dotenv()
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -32,10 +33,12 @@ SERVERS = {
         'command': 'uv',
         'args': ['run', 'fastmcp', 'run', 'A:\\PRO\\p1\\tools.py']
     },
-
     'sub': {
         'transport': 'streamable_http',
-        'url': 'https://dynamic-purple-blackbird.fastmcp.app/mcp'
+        'url': 'https://chatbot-with-mcp.fastmcp.app/mcp',
+        'headers': {
+            'Authorization': f'Bearer {os.getenv("FASTMCP_API_KEY")}'
+        }
     }
 }
 
@@ -133,7 +136,7 @@ async def main():
                 checkpointer=checkpointer
                 )
 
-            config = {'configurable': {'user_id': 'a5', 'thread_id': 'A5'}}
+            config = {'configurable': {'user_id': 'b1', 'thread_id': 'B1'}}
 
             while True:
                 user_input = input('\nuser: ')
