@@ -173,12 +173,32 @@ async def main():
                         break
 
                 print()
-                print("\n--- Current Stored Memories ---")
+                print('-'*60)
+                print('*'*60)
+                print('-'*60)
+                print("\n--- User's Personal Facts ---\n")
                 namespace = ('user', config['configurable']['user_id'], 'details')
                 personal_messages = store.search(namespace)
                 for i in personal_messages:
                     print(i.value['data'])
-                print("-------------------------------")
+                print('-'*60)
+                print('*'*60)
+                print('-'*60)
+                print()
+
+
+        t1 = {'configurable': {'user_id': 'b1', 'thread_id': 'B1'}}
+        snap = await chatbot.aget_state(t1)
+        mesg = snap.values.get('messages', [])
+        print('-'*150)
+        print('*'*150)
+        print('-'*150)
+        print("\n--- Full Conversation History ---\n")
+        for m in mesg:
+            print(f"{m.__class__.__name__}: {m.content}\n")
+        print('-'*150)
+        print('*'*150)
+        print('-'*150)
 
 if __name__ == '__main__':
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())

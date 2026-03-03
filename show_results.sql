@@ -1,4 +1,7 @@
-SELECT type, blob
+SELECT 
+    thread_id,
+    type,
+    channel
 FROM checkpoint_blobs
-WHERE thread_id = 'A1'
-LIMIT 5;
+WHERE channel = 'messages'
+ORDER BY thread_id;
